@@ -1,0 +1,14 @@
+{
+  "name": "p2p-chat-signaling-server",
+  "version": "1.0.0",
+  "description": "Minimal signaling server for a WebRTC peer-to-peer chat app. Only relays connection setup info (offer/answer/ICE candidates) — never chat messages.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "socket.io": "^4.7.5"
+  }
+}

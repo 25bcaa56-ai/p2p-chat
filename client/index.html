@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>P2P Chat</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- JOIN SCREEN -->
+  <div id="join-screen" class="screen">
+    <div class="card">
+      <h1>P2P Chat</h1>
+      <p class="subtitle">Direct, peer-to-peer, real-time.</p>
+
+      <label for="username">Your name</label>
+      <input id="username" type="text" placeholder="e.g. Asha" maxlength="20" />
+
+      <label for="room">Room code</label>
+      <input id="room" type="text" placeholder="Share this with the other person" maxlength="30" />
+
+      <button id="join-btn">Join Room</button>
+      <p id="join-status" class="status"></p>
+    </div>
+  </div>
+
+  <!-- CHAT SCREEN -->
+  <div id="chat-screen" class="screen hidden">
+    <header class="chat-header">
+      <div>
+        <strong id="room-label"></strong>
+        <span id="conn-status" class="badge">connecting…</span>
+      </div>
+      <button id="leave-btn" class="ghost-btn">Leave</button>
+    </header>
+
+    <div id="messages" class="messages"></div>
+
+    <form id="message-form" class="message-form">
+      <input id="message-input" type="text" placeholder="Type a message…" autocomplete="off" disabled />
+      <button type="submit" disabled>Send</button>
+    </form>
+  </div>
+
+  <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
