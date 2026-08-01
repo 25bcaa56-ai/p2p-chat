@@ -1,6 +1,6 @@
 // ── Config ──────────────────────────────────────────────────────────
 // Point this at your signaling server (see /server folder).
-const SIGNALING_SERVER_URL = "http://localhost:3001";
+const SIGNALING_SERVER_URL = "https://p2p-chat-fgkl.onrender.com";
 
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" } // free public STUN server, just for NAT traversal
