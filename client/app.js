@@ -2,24 +2,26 @@
 const SIGNALING_SERVER_URL = "https://p2p-chat-fgkl.onrender.com"; // <-- change to your deployed server URL
 
 const ICE_SERVERS = [
-  { urls: "stun:stun.l.google.com:19302" },
-  // Free public TURN server (Open Relay Project) — relays traffic when a
-  // direct P2P connection isn't possible, e.g. one side is on mobile data.
   { urls: "stun:stun.relay.metered.ca:80" },
   {
-    urls: "turn:relay.metered.ca:80",
-    username: "openrelayproject",
-    credential: "openrelayproject"
+    urls: "turn:global.relay.metered.ca:80",
+    username: "4c3927c1790c3beb7c652008",
+    credential: "eFKT1+FTU+Zt218D"
   },
   {
-    urls: "turn:relay.metered.ca:443",
-    username: "openrelayproject",
-    credential: "openrelayproject"
+    urls: "turn:global.relay.metered.ca:80?transport=tcp",
+    username: "4c3927c1790c3beb7c652008",
+    credential: "eFKT1+FTU+Zt218D"
   },
   {
-    urls: "turn:relay.metered.ca:443?transport=tcp",
-    username: "openrelayproject",
-    credential: "openrelayproject"
+    urls: "turn:global.relay.metered.ca:443",
+    username: "4c3927c1790c3beb7c652008",
+    credential: "eFKT1+FTU+Zt218D"
+  },
+  {
+    urls: "turns:global.relay.metered.ca:443?transport=tcp",
+    username: "4c3927c1790c3beb7c652008",
+    credential: "eFKT1+FTU+Zt218D"
   }
 ];
 
