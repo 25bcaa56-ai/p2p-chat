@@ -219,3 +219,166 @@ button {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ── Header actions & icon buttons ─────────────────────────────── */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.icon-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover { border-color: var(--accent); }
+.icon-btn.danger { background: var(--danger); border-color: var(--danger); }
+.icon-btn.muted { opacity: 0.5; }
+
+/* ── Call panel ─────────────────────────────────────────────────── */
+.call-panel {
+  position: relative;
+  background: #000;
+  height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid var(--border);
+}
+
+#remote-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+}
+
+#local-video {
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  width: 110px;
+  height: 80px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 2px solid var(--border);
+  background: #111;
+}
+
+.call-controls {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Typing indicator ───────────────────────────────────────────── */
+.typing-indicator {
+  padding: 0 20px 4px;
+  font-size: 12px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ── File/image messages ────────────────────────────────────────── */
+.msg img.chat-image {
+  max-width: 220px;
+  border-radius: 10px;
+  display: block;
+  margin-top: 2px;
+}
+
+.msg .file-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255,255,255,0.06);
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.msg .file-chip a {
+  color: var(--accent-2);
+  text-decoration: none;
+}
+
+.msg .file-progress {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+/* ── Read receipts ──────────────────────────────────────────────── */
+.msg .ticks {
+  margin-left: 4px;
+  font-size: 11px;
+}
+.msg .ticks.read { color: var(--accent-2); }
+
+/* ── Reactions ───────────────────────────────────────────────────── */
+.msg .reactions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.msg .reactions span {
+  background: rgba(255,255,255,0.08);
+  border-radius: 10px;
+  padding: 1px 6px;
+  font-size: 12px;
+}
+
+.msg .react-trigger {
+  opacity: 0;
+  cursor: pointer;
+  font-size: 12px;
+  margin-left: 6px;
+  transition: opacity 0.15s;
+}
+
+.msg:hover .react-trigger { opacity: 0.6; }
+.msg .react-trigger:hover { opacity: 1; }
+
+/* ── Emoji picker ───────────────────────────────────────────────── */
+.emoji-picker {
+  position: absolute;
+  bottom: 70px;
+  left: 20px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  gap: 8px;
+  font-size: 20px;
+  z-index: 5;
+}
+
+.emoji-picker span { cursor: pointer; }
+.emoji-picker span:hover { transform: scale(1.2); }
+
+.mini-emoji-picker {
+  position: absolute;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 6px 8px;
+  display: flex;
+  gap: 6px;
+  font-size: 16px;
+  z-index: 6;
+}
+.mini-emoji-picker span { cursor: pointer; }

@@ -32,15 +32,39 @@
         <strong id="room-label"></strong>
         <span id="conn-status" class="badge">connecting…</span>
       </div>
-      <button id="leave-btn" class="ghost-btn">Leave</button>
+      <div class="header-actions">
+        <button id="voice-call-btn" class="icon-btn" title="Voice call">🎙️</button>
+        <button id="video-call-btn" class="icon-btn" title="Video call">🎥</button>
+        <button id="leave-btn" class="ghost-btn">Leave</button>
+      </div>
     </header>
+
+    <!-- CALL PANEL (hidden until a call starts) -->
+    <div id="call-panel" class="call-panel hidden">
+      <video id="remote-video" autoplay playsinline></video>
+      <video id="local-video" autoplay playsinline muted></video>
+      <div class="call-controls">
+        <button id="toggle-mic-btn" class="icon-btn" title="Mute/unmute">🎙️</button>
+        <button id="toggle-cam-btn" class="icon-btn hidden" title="Camera on/off">🎥</button>
+        <button id="end-call-btn" class="icon-btn danger" title="End call">📞</button>
+      </div>
+    </div>
 
     <div id="messages" class="messages"></div>
 
+    <div id="typing-indicator" class="typing-indicator hidden"></div>
+
     <form id="message-form" class="message-form">
+      <button type="button" id="file-btn" class="icon-btn" title="Send file/image">📎</button>
+      <input id="file-input" type="file" class="hidden" />
+      <button type="button" id="emoji-btn" class="icon-btn" title="Emoji">😊</button>
       <input id="message-input" type="text" placeholder="Type a message…" autocomplete="off" disabled />
       <button type="submit" disabled>Send</button>
     </form>
+
+    <div id="emoji-picker" class="emoji-picker hidden">
+      <span>👍</span><span>❤️</span><span>😂</span><span>😮</span><span>😢</span><span>🙏</span><span>🎉</span><span>🔥</span>
+    </div>
   </div>
 
   <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
