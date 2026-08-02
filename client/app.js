@@ -1,5 +1,5 @@
 // ── Config ──────────────────────────────────────────────────────────
-const SIGNALING_SERVER_URL = "http://localhost:3001"; // <-- change to your deployed server URL
+const SIGNALING_SERVER_URL = "https://p2p-chat-fgkl.onrender.com"; // <-- change to your deployed server URL
 
 const ICE_SERVERS = [
   { urls: "stun:stun.l.google.com:19302" },
