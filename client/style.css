@@ -248,7 +248,11 @@ button {
 .call-panel {
   position: relative;
   background: #000;
-  height: 260px;
+  /* Reserve room for chat while giving landscape and portrait video space. */
+  flex: 0 0 auto;
+  height: clamp(240px, 55dvh, 640px);
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -258,17 +262,20 @@ button {
 #remote-video {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   background: #000;
 }
 
 #local-video {
   position: absolute;
-  bottom: 12px;
+  top: 12px;
   right: 12px;
-  width: 110px;
-  height: 80px;
-  object-fit: cover;
+  width: clamp(88px, 16vw, 180px);
+  height: auto;
+  max-height: 32%;
+  aspect-ratio: 4 / 3;
+  object-fit: contain;
+  transform: scaleX(-1);
   border-radius: 8px;
   border: 2px solid var(--border);
   background: #111;
@@ -277,9 +284,14 @@ button {
 .call-controls {
   position: absolute;
   bottom: 12px;
-  left: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   display: flex;
-  gap: 8px;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 32px;
+  background: rgba(15, 17, 21, 0.85);
+  border: 1px solid var(--border);
 }
 
 /* ── Typing indicator ───────────────────────────────────────────── */
@@ -473,4 +485,13 @@ button:focus-visible { outline: 2px solid var(--accent-2); outline-offset: 3px; 
   .message-form { padding: 12px 8px; gap: 6px; }
   .message-form button { padding: 0 12px; }
   .msg { max-width: 90%; }
+}
+
+/* A short landscape viewport must still leave space for messages and typing. */
+@media (max-height: 500px) {
+  .call-panel { height: 45dvh; }
+}
+@media (max-width: 600px) {
+  .call-panel { height: 45dvh; }
+  #local-video { top: 10px; right: 10px; width: 88px; }
 }
