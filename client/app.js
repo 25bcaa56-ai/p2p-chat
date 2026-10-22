@@ -79,6 +79,9 @@ let isInitiator = false;
 let polite = false;       // perfect-negotiation role
 let makingOffer = false;
 let ignoreOffer = false;
+let pendingCandidates = [];
+let signalQueue = Promise.resolve();
+let connectionTimer = null;
 
 let localStream = null;
 let inCall = false;
@@ -225,93 +228,149 @@ function addSystemMessage(text) {
   renderMessage({ sender: "system", text });
 }
 
-function setConnected(isConnected) {
-  connStatus.textContent = isConnected ? "connected" : "connecting…";
-  connStatus.classList.toggle("connected", isConnected);
-  messageInput.disabled = !isConnected;
-  sendBtn.disabled = !isConnected;
-  voiceCallBtn.disabled = !isConnected;
-  videoCallBtn.disabled = !isConnected;
-  if (isConnected) messageInput.focus();
+function setConnected(isConnected, status = "Connecting to peer…") {
+  const ready = isConnected && dataChannel?.readyState === "open";
+  connStatus.textContent = ready ? "Connected" : status;
+  connStatus.classList.toggle("connected", ready);
+  messageInput.disabled = !ready;
+  sendBtn.disabled = !ready;
+  fileBtn.disabled = !ready;
+  voiceCallBtn.disabled = !ready;
+  videoCallBtn.disabled = !ready;
+  document.getElementById("retry-btn").hidden = ready;
+  if (ready) {
+    clearTimeout(connectionTimer);
+    messageInput.focus();
+  }
+}
+
+function resetPeer() {
+  clearTimeout(connectionTimer);
+  hangUp(false);
+  if (dataChannel) {
+    dataChannel.onclose = null;
+    dataChannel.close();
+  }
+  if (pc) {
+    pc.onnegotiationneeded = null;
+    pc.onconnectionstatechange = null;
+    pc.onicecandidate = null;
+    pc.close();
+  }
+  pc = null;
+  dataChannel = null;
+  pendingCandidates = [];
+  makingOffer = false;
+  ignoreOffer = false;
+  receivingFile = null;
+  clearTimeout(typingTimeout);
+  setPeerTyping(false);
 }
 
 // ── Join flow ───────────────────────────────────────────────────────
 joinBtn.addEventListener("click", () => {
   username = usernameInput.value.trim();
   roomId = roomInput.value.trim();
-
   if (!username || !roomId) {
     joinStatus.textContent = "Please enter both a name and a room code.";
     return;
   }
-
-  joinStatus.textContent = "";
+  joinStatus.textContent = "Contacting server… This may take a moment.";
   startConnection();
 });
 
 function startConnection() {
-  socket = io(SIGNALING_SERVER_URL);
+  if (socket) {
+    const previousSocket = socket;
+    socket = null;
+    previousSocket.disconnect();
+  }
+  resetPeer();
+  setConnected(false, "Contacting server…");
+  joinBtn.disabled = true;
+  const activeSocket = socket = io(SIGNALING_SERVER_URL);
 
+  // Socket.IO reconnects with a new socket ID, so membership must be restored.
+  socket.on("connect", () => {
+    if (socket !== activeSocket) return;
+    socket.emit("join-room", { roomId, username });
+  });
+  socket.on("disconnect", () => {
+    if (socket !== activeSocket) return;
+    resetPeer();
+    setConnected(false, "Server disconnected — reconnecting…");
+  });
   socket.on("connect_error", () => {
-    joinStatus.textContent = "Could not reach signaling server. Is it running?";
+    if (socket !== activeSocket) return;
+    joinBtn.disabled = false;
+    joinStatus.textContent = "Cannot reach the server. Check your connection and try again.";
+    setConnected(false, "Cannot reach server — retry");
   });
-
-  socket.on("room-full", () => {
-    joinStatus.textContent = "That room already has 2 people. Try another room code.";
-  });
-
-  socket.on("joined", async ({ isInitiator: initiatorFlag }) => {
+  const rejectJoin = (message) => {
+    joinBtn.disabled = false;
+    joinStatus.textContent = message;
+    setConnected(false, message);
+    if (socket === activeSocket) socket = null;
+    activeSocket.disconnect();
+  };
+  socket.on("room-full", () => rejectJoin("That room already has 2 people. Try another room code."));
+  socket.on("join-error", () => rejectJoin("Enter a valid name and room code."));
+  socket.on("joined", ({ isInitiator: initiatorFlag }) => {
+    if (socket !== activeSocket) return;
+    resetPeer();
     isInitiator = initiatorFlag;
-    polite = !isInitiator; // the peer who joins second (initiator) is "impolite"; first is "polite"
-    showChatScreen();
+    polite = !isInitiator;
+    joinBtn.disabled = false;
+    if (chatScreen.classList.contains("hidden")) showChatScreen();
     createPeerConnection();
-
+    setConnected(false, isInitiator ? "Connecting to peer…" : "Waiting for another person…");
     if (isInitiator) {
       dataChannel = pc.createDataChannel("chat");
       setupDataChannel();
     }
   });
-
   socket.on("peer-joined", ({ username: peerName }) => {
     addSystemMessage(`${peerName} joined the room.`);
+    setConnected(false);
   });
-
   socket.on("peer-left", ({ username: peerName }) => {
     addSystemMessage(`${peerName} left the room.`);
-    setConnected(false);
-    hangUp(false);
+    resetPeer();
+    polite = true;
+    createPeerConnection();
+    setConnected(false, "Peer left — waiting for another person…");
   });
-
-  socket.on("signal", async ({ data }) => {
-    try {
+  socket.on("signal", ({ data }) => {
+    // Serialize SDP/ICE work; async event callbacks otherwise race each other.
+    const target = pc;
+    signalQueue = signalQueue.then(async () => {
+      if (!target || target !== pc || socket !== activeSocket) return;
       if (data.type === "offer" || data.type === "answer") {
-        const offerCollision =
-          data.type === "offer" && (makingOffer || pc.signalingState !== "stable");
-
-        ignoreOffer = !polite && offerCollision;
+        const collision = data.type === "offer" && (makingOffer || target.signalingState !== "stable");
+        ignoreOffer = !polite && collision;
         if (ignoreOffer) return;
-
-        await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
-
+        await target.setRemoteDescription(data.sdp);
+        if (target !== pc || socket !== activeSocket) return;
+        for (const candidate of pendingCandidates.splice(0)) await target.addIceCandidate(candidate);
         if (data.type === "offer") {
-          const answer = await pc.createAnswer();
-          await pc.setLocalDescription(answer);
-          socket.emit("signal", { roomId, data: { type: "answer", sdp: answer } });
+          const answer = await target.createAnswer();
+          if (target !== pc || socket !== activeSocket) return;
+          await target.setLocalDescription(answer);
+          if (target !== pc || socket !== activeSocket) return;
+          activeSocket.emit("signal", { roomId, data: { type: "answer", sdp: target.localDescription } });
         }
-      } else if (data.type === "candidate" && data.candidate) {
-        try {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
-        } catch (err) {
-          if (!ignoreOffer) console.warn("Failed to add ICE candidate", err);
-        }
+      } else if (data.type === "candidate" && data.candidate && !ignoreOffer) {
+        if (target.remoteDescription) await target.addIceCandidate(data.candidate);
+        else pendingCandidates.push(data.candidate);
       }
-    } catch (err) {
+    }).catch((err) => {
       console.error("Signal handling error", err);
-    }
+      if (target === pc) setConnected(false, "Connection setup failed — retry");
+    });
   });
-
-  socket.emit("join-room", { roomId, username });
 }
+
+document.getElementById("retry-btn").addEventListener("click", startConnection);
 
 function showChatScreen() {
   joinScreen.classList.add("hidden");
@@ -325,23 +384,31 @@ function showChatScreen() {
 // ── WebRTC setup (perfect negotiation, supports adding media later) ──
 function createPeerConnection() {
   pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  const target = pc;
+  const activeSocket = socket;
 
   pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      socket.emit("signal", { roomId, data: { type: "candidate", candidate: event.candidate } });
+    if (event.candidate && target === pc && socket === activeSocket) {
+      activeSocket.emit("signal", { roomId, data: { type: "candidate", candidate: event.candidate } });
     }
   };
 
   pc.onnegotiationneeded = async () => {
     try {
+      clearTimeout(connectionTimer);
+      connectionTimer = setTimeout(() => {
+        if (dataChannel?.readyState !== "open") setConnected(false, "Connection timed out — retry");
+      }, 30000);
       makingOffer = true;
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit("signal", { roomId, data: { type: "offer", sdp: offer } });
+      const offer = await target.createOffer();
+      if (target !== pc || socket !== activeSocket) return;
+      await target.setLocalDescription(offer);
+      if (target !== pc || socket !== activeSocket) return;
+      activeSocket.emit("signal", { roomId, data: { type: "offer", sdp: target.localDescription } });
     } catch (err) {
       console.error("Negotiation error", err);
     } finally {
-      makingOffer = false;
+      if (target === pc) makingOffer = false;
     }
   };
 
@@ -358,8 +425,11 @@ function createPeerConnection() {
   };
 
   pc.onconnectionstatechange = () => {
-    if (pc.connectionState === "connected") setConnected(true);
-    if (["disconnected", "failed", "closed"].includes(pc.connectionState)) setConnected(false);
+    if (target !== pc) return;
+    if (target.connectionState === "connected") setConnected(true);
+    if (["disconnected", "failed", "closed"].includes(target.connectionState)) {
+      setConnected(false, "Peer connection lost — retry");
+    }
   };
 }
 
@@ -371,8 +441,12 @@ function setupDataChannel() {
 
   dataChannel.onmessage = (event) => {
     if (typeof event.data === "string") {
-      const payload = JSON.parse(event.data);
-      handleControlMessage(payload);
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload && typeof payload.type === "string") handleControlMessage(payload);
+      } catch (err) {
+        console.warn("Invalid peer message", err);
+      }
     } else {
       handleIncomingChunk(event.data);
     }
@@ -892,14 +966,17 @@ function stopRingSound() {
 
 // ── Leaving ─────────────────────────────────────────────────────────
 leaveBtn.addEventListener("click", () => {
-  hangUp(false);
-  if (dataChannel) dataChannel.close();
-  if (pc) pc.close();
-  if (socket) socket.disconnect();
+  if (socket) {
+    const previousSocket = socket;
+    socket = null;
+    previousSocket.disconnect();
+  }
+  resetPeer();
+  joinBtn.disabled = false;
 
   chatScreen.classList.add("hidden");
   joinScreen.classList.remove("hidden");
   messagesEl.innerHTML = "";
   joinStatus.textContent = "";
-  setConnected(false);
+  setConnected(false, "Waiting for another person…");
 });

@@ -85,3 +85,36 @@ p2p-chat/
 │   └── app.js           # WebRTC + Socket.IO + localStorage logic
 └── README.md
 ```
+
+## Connection reliability update
+
+- Rejoin the room whenever Socket.IO reconnects.
+- Process signaling in order and buffer ICE candidates until remote SDP exists.
+- Close departed peer connections before allowing a replacement peer.
+- Enable messaging and calls only after the data channel opens.
+- Display waiting, server failure, timeout, and retry states.
+- Reject malformed joins, duplicate memberships, and cross-room signaling.
+- Add an accessible message label and improve narrow-screen layouts.
+
+Run the dependency-free regression checks from the repository root:
+
+```bash
+node --test tests/connection.test.cjs
+node --check client/app.js
+node --check server/server.js
+```
+
+These checks use simulated browser and signaling objects. They do not verify
+actual WebRTC connectivity, TURN availability, file transfers, or media calls.
+Test those in two real devices on different networks before release.
+
+Deploy both components: update the Node signaling service from `server/` and
+publish `client/` to Netlify. This source update does not change either live deployment.
+
+### Remaining security work
+
+The existing client contains static TURN credentials. Treat those as public,
+rotate them at the provider, and replace long-lived credentials with a
+server-issued short-lived credential flow. A room code is also an invitation,
+not authenticated user identity. Use unpredictable room codes and do not treat
+this prototype as a hardened private messaging service.

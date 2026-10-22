@@ -23,8 +23,15 @@ io.on("connection", (socket) => {
   let currentRoom = null;
   let currentUsername = null;
 
-  socket.on("join-room", ({ roomId, username }) => {
-    if (!roomId || !username) return;
+  socket.on("join-room", (payload = {}) => {
+    const { roomId, username } = payload || {};
+    if (typeof roomId !== "string" || typeof username !== "string" ||
+        !roomId.trim() || !username.trim() || roomId.length > 30 || username.length > 20) {
+      socket.emit("join-error");
+      return;
+    }
+    // One room per socket. Repeated join events must not consume another slot.
+    if (currentRoom) return;
 
     const existing = rooms.get(roomId) || [];
 
@@ -49,8 +56,11 @@ io.on("connection", (socket) => {
   });
 
   // Relay WebRTC signaling data verbatim between the two peers in a room.
-  socket.on("signal", ({ roomId, data }) => {
-    socket.to(roomId).emit("signal", { data, from: currentUsername });
+  socket.on("signal", (payload = {}) => {
+    const { roomId, data } = payload || {};
+    if (!currentRoom || roomId !== currentRoom || !data ||
+        !["offer", "answer", "candidate"].includes(data.type)) return;
+    socket.to(currentRoom).emit("signal", { data, from: currentUsername });
   });
 
   socket.on("disconnect", () => {
