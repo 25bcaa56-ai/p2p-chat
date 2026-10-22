@@ -58,6 +58,16 @@ const remoteVideo = document.getElementById("remote-video");
 const toggleMicBtn = document.getElementById("toggle-mic-btn");
 const toggleCamBtn = document.getElementById("toggle-cam-btn");
 const endCallBtn = document.getElementById("end-call-btn");
+const callTimerEl = document.getElementById("call-timer");
+
+const outgoingCallOverlay = document.getElementById("outgoing-call-overlay");
+const outgoingCallLabel = document.getElementById("outgoing-call-label");
+const cancelCallBtn = document.getElementById("cancel-call-btn");
+
+const incomingCallOverlay = document.getElementById("incoming-call-overlay");
+const incomingCallLabel = document.getElementById("incoming-call-label");
+const acceptCallBtn = document.getElementById("accept-call-btn");
+const declineCallBtn = document.getElementById("decline-call-btn");
 
 // ── State ───────────────────────────────────────────────────────────
 let socket = null;
@@ -75,6 +85,15 @@ let inCall = false;
 let callHasVideo = false;
 let micOn = true;
 let camOn = true;
+
+// callState: "idle" | "calling" (we rang them) | "ringing" (they rang us) | "connected"
+let callState = "idle";
+let pendingCallId = null;
+let pendingCallType = null; // "voice" | "video"
+let ringAudioCtx = null;
+let ringIntervalId = null;
+let callTimerIntervalId = null;
+let callStartTime = null;
 
 let typingTimeout = null;
 let peerIsTyping = false;
@@ -260,7 +279,7 @@ function startConnection() {
   socket.on("peer-left", ({ username: peerName }) => {
     addSystemMessage(`${peerName} left the room.`);
     setConnected(false);
-    endCall(false);
+    hangUp(false);
   });
 
   socket.on("signal", async ({ data }) => {
@@ -333,8 +352,9 @@ function createPeerConnection() {
 
   pc.ontrack = (event) => {
     remoteVideo.srcObject = event.streams[0];
-    callPanel.classList.remove("hidden");
-    inCall = true;
+    // Call panel visibility/state is driven by the ring → accept flow above,
+    // not directly by track arrival, so an incoming-call popup always shows
+    // before any audio/video appears.
   };
 
   pc.onconnectionstatechange = () => {
@@ -422,6 +442,45 @@ function handleControlMessage(payload) {
       renderMessage(entry);
       saveMessage(entry);
       sendControl({ type: "read", id: entry.id });
+      break;
+    }
+    case "call-request": {
+      if (callState !== "idle") {
+        // We're already busy — auto-decline.
+        sendControl({ type: "call-reject", id: payload.id });
+        return;
+      }
+      pendingCallId = payload.id;
+      pendingCallType = payload.callType;
+      callState = "ringing";
+      incomingCallLabel.textContent = `${payload.from} is calling… (${payload.callType === "video" ? "video" : "voice"} call)`;
+      incomingCallOverlay.classList.remove("hidden");
+      playRingSound();
+      break;
+    }
+    case "call-accept": {
+      if (callState === "calling" && payload.id === pendingCallId) {
+        handleCallAccepted();
+      }
+      break;
+    }
+    case "call-reject": {
+      if (payload.id === pendingCallId) {
+        addSystemMessage("Call declined.");
+        resetCallUI();
+      }
+      break;
+    }
+    case "call-cancel": {
+      if (payload.id === pendingCallId) {
+        addSystemMessage("Missed call.");
+        resetCallUI();
+      }
+      break;
+    }
+    case "call-end": {
+      addSystemMessage("Call ended.");
+      hangUp(false);
       break;
     }
     case "file-end": {
@@ -630,32 +689,132 @@ function sendFileChunks(file) {
   });
 }
 
-// ── Voice / video calls ──────────────────────────────────────────────
-voiceCallBtn.addEventListener("click", () => startCall(false));
-videoCallBtn.addEventListener("click", () => startCall(true));
-endCallBtn.addEventListener("click", () => endCall(true));
+// ── Voice / video calls: proper ring → accept/decline → connect flow ─
+//
+// Flow:
+//  1. Caller clicks call button -> sends "call-request" over the data
+//     channel (no mic/camera access yet) -> shows "Calling..." overlay.
+//  2. Callee sees an incoming-call popup with a ring sound and Accept/Decline.
+//  3. Callee clicks Accept -> only now does their browser ask for mic/camera
+//     permission -> sends "call-accept".
+//  4. On receiving "call-accept", the caller also grabs their mic/camera and
+//     adds tracks to the peer connection, which triggers WebRTC renegotiation
+//     automatically (see onnegotiationneeded above).
+//  5. Either side can send "call-end" to hang up; "call-reject"/"call-cancel"
+//     handle declining or giving up before it connects.
 
-async function startCall(withVideo) {
-  try {
-    localStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: withVideo });
-  } catch (err) {
-    addSystemMessage("Couldn't access microphone/camera. Check browser permissions.");
-    console.error(err);
+voiceCallBtn.addEventListener("click", () => initiateCall("voice"));
+videoCallBtn.addEventListener("click", () => initiateCall("video"));
+cancelCallBtn.addEventListener("click", () => cancelOutgoingCall());
+acceptCallBtn.addEventListener("click", () => acceptIncomingCall());
+declineCallBtn.addEventListener("click", () => declineIncomingCall());
+endCallBtn.addEventListener("click", () => hangUp(true));
+
+function initiateCall(callType) {
+  if (callState !== "idle") return; // already in/starting a call
+  if (!dataChannel || dataChannel.readyState !== "open") {
+    addSystemMessage("Not connected yet — can't start a call.");
     return;
   }
 
-  callHasVideo = withVideo;
-  localVideo.srcObject = localStream;
-  localVideo.classList.toggle("hidden", !withVideo);
-  toggleCamBtn.classList.toggle("hidden", !withVideo);
-  callPanel.classList.remove("hidden");
-  inCall = true;
+  pendingCallId = genId();
+  pendingCallType = callType;
+  callState = "calling";
 
-  localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
-  // onnegotiationneeded fires automatically and handles the offer/answer exchange.
+  sendControl({ type: "call-request", id: pendingCallId, callType, from: username });
+
+  outgoingCallLabel.textContent = `Calling… (${callType === "video" ? "video" : "voice"} call)`;
+  outgoingCallOverlay.classList.remove("hidden");
 }
 
-function endCall(notifyUI) {
+function cancelOutgoingCall() {
+  if (pendingCallId) sendControl({ type: "call-cancel", id: pendingCallId });
+  resetCallUI();
+}
+
+function declineIncomingCall() {
+  stopRingSound();
+  if (pendingCallId) sendControl({ type: "call-reject", id: pendingCallId });
+  resetCallUI();
+}
+
+async function acceptIncomingCall() {
+  stopRingSound();
+  const callType = pendingCallType;
+  const callId = pendingCallId;
+
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: callType === "video"
+    });
+  } catch (err) {
+    addSystemMessage("Couldn't access microphone/camera. Check browser permissions.");
+    console.error(err);
+    sendControl({ type: "call-reject", id: callId });
+    resetCallUI();
+    return;
+  }
+
+  callHasVideo = callType === "video";
+  setupCallPanelUI();
+
+  sendControl({ type: "call-accept", id: callId });
+  localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+
+  incomingCallOverlay.classList.add("hidden");
+  enterConnectedCallState();
+}
+
+async function handleCallAccepted() {
+  // Caller's side: the other person accepted, now we grab our own media.
+  try {
+    localStream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: pendingCallType === "video"
+    });
+  } catch (err) {
+    addSystemMessage("Couldn't access microphone/camera. Check browser permissions.");
+    console.error(err);
+    sendControl({ type: "call-end", id: pendingCallId });
+    resetCallUI();
+    return;
+  }
+
+  callHasVideo = pendingCallType === "video";
+  setupCallPanelUI();
+  localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
+
+  outgoingCallOverlay.classList.add("hidden");
+  enterConnectedCallState();
+}
+
+function setupCallPanelUI() {
+  localVideo.srcObject = localStream;
+  localVideo.classList.toggle("hidden", !callHasVideo);
+  toggleCamBtn.classList.toggle("hidden", !callHasVideo);
+  callPanel.classList.remove("hidden");
+}
+
+function enterConnectedCallState() {
+  callState = "connected";
+  inCall = true;
+  callStartTime = Date.now();
+  callTimerIntervalId = setInterval(updateCallTimer, 1000);
+  updateCallTimer();
+}
+
+function updateCallTimer() {
+  const secs = Math.floor((Date.now() - callStartTime) / 1000);
+  const mm = String(Math.floor(secs / 60)).padStart(2, "0");
+  const ss = String(secs % 60).padStart(2, "0");
+  callTimerEl.textContent = `${mm}:${ss}`;
+}
+
+function hangUp(notifyPeer) {
+  if (notifyPeer && callState !== "idle") {
+    sendControl({ type: "call-end", id: pendingCallId });
+  }
   if (localStream) {
     localStream.getTracks().forEach((track) => track.stop());
     localStream = null;
@@ -665,9 +824,24 @@ function endCall(notifyUI) {
       if (sender.track) pc.removeTrack(sender);
     });
   }
+  resetCallUI();
+}
+
+function resetCallUI() {
+  stopRingSound();
+  clearInterval(callTimerIntervalId);
+  callTimerIntervalId = null;
+  callTimerEl.textContent = "00:00";
+
   localVideo.srcObject = null;
   remoteVideo.srcObject = null;
-  if (notifyUI) callPanel.classList.add("hidden");
+  callPanel.classList.add("hidden");
+  outgoingCallOverlay.classList.add("hidden");
+  incomingCallOverlay.classList.add("hidden");
+
+  callState = "idle";
+  pendingCallId = null;
+  pendingCallType = null;
   inCall = false;
 }
 
@@ -685,9 +859,40 @@ toggleCamBtn.addEventListener("click", () => {
   toggleCamBtn.classList.toggle("muted", !camOn);
 });
 
+// ── Ring sound (simple beeping tone, no audio file needed) ──────────
+function playRingSound() {
+  try {
+    ringAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const beep = () => {
+      if (!ringAudioCtx) return;
+      const osc = ringAudioCtx.createOscillator();
+      const gain = ringAudioCtx.createGain();
+      osc.frequency.value = 880;
+      gain.gain.setValueAtTime(0.15, ringAudioCtx.currentTime);
+      osc.connect(gain);
+      gain.connect(ringAudioCtx.destination);
+      osc.start();
+      osc.stop(ringAudioCtx.currentTime + 0.3);
+    };
+    beep();
+    ringIntervalId = setInterval(beep, 1200);
+  } catch (err) {
+    console.warn("Could not play ring sound", err);
+  }
+}
+
+function stopRingSound() {
+  clearInterval(ringIntervalId);
+  ringIntervalId = null;
+  if (ringAudioCtx) {
+    ringAudioCtx.close();
+    ringAudioCtx = null;
+  }
+}
+
 // ── Leaving ─────────────────────────────────────────────────────────
 leaveBtn.addEventListener("click", () => {
-  endCall(true);
+  hangUp(false);
   if (dataChannel) dataChannel.close();
   if (pc) pc.close();
   if (socket) socket.disconnect();

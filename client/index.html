@@ -39,10 +39,32 @@
       </div>
     </header>
 
-    <!-- CALL PANEL (hidden until a call starts) -->
+    <!-- OUTGOING CALL OVERLAY (caller sees this while waiting) -->
+    <div id="outgoing-call-overlay" class="call-overlay hidden">
+      <div class="call-overlay-content">
+        <div class="call-pulse">📞</div>
+        <p id="outgoing-call-label">Calling…</p>
+        <button id="cancel-call-btn" class="ghost-btn danger-text">Cancel</button>
+      </div>
+    </div>
+
+    <!-- INCOMING CALL MODAL (callee sees this when rung) -->
+    <div id="incoming-call-overlay" class="call-overlay hidden">
+      <div class="call-overlay-content">
+        <div class="call-pulse">📲</div>
+        <p id="incoming-call-label">Incoming call…</p>
+        <div class="incoming-call-actions">
+          <button id="decline-call-btn" class="round-btn danger" title="Decline">✕</button>
+          <button id="accept-call-btn" class="round-btn accept" title="Accept">✓</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CALL PANEL (hidden until a call is actually connected) -->
     <div id="call-panel" class="call-panel hidden">
       <video id="remote-video" autoplay playsinline></video>
       <video id="local-video" autoplay playsinline muted></video>
+      <span id="call-timer" class="call-timer">00:00</span>
       <div class="call-controls">
         <button id="toggle-mic-btn" class="icon-btn" title="Mute/unmute">🎙️</button>
         <button id="toggle-cam-btn" class="icon-btn hidden" title="Camera on/off">🎥</button>

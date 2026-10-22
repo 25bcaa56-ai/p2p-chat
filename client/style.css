@@ -382,3 +382,80 @@ button {
   z-index: 6;
 }
 .mini-emoji-picker span { cursor: pointer; }
+
+/* ── Call overlays (ringing / calling) ─────────────────────────── */
+.call-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 16, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+
+.call-overlay-content {
+  text-align: center;
+}
+
+.call-pulse {
+  font-size: 48px;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: var(--panel);
+  border: 2px solid var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+  animation: pulse 1.4s infinite;
+}
+
+@keyframes pulse {
+  0% { box-shadow: 0 0 0 0 rgba(91, 141, 239, 0.5); }
+  70% { box-shadow: 0 0 0 20px rgba(91, 141, 239, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(91, 141, 239, 0); }
+}
+
+#outgoing-call-label,
+#incoming-call-label {
+  font-size: 16px;
+  margin: 0 0 20px;
+  color: var(--text);
+}
+
+.danger-text {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.incoming-call-actions {
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+}
+
+.round-btn {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  font-size: 22px;
+  border: none;
+  color: white;
+}
+
+.round-btn.accept { background: var(--accent-2); }
+.round-btn.danger { background: var(--danger); }
+
+/* ── Call timer ──────────────────────────────────────────────────── */
+.call-timer {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: rgba(0,0,0,0.5);
+  color: white;
+  font-size: 12px;
+  padding: 3px 9px;
+  border-radius: 20px;
+}
